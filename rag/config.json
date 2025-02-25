@@ -1,0 +1,5 @@
+{
+  "collection_name": "mc_fabric_coll",
+  "persist_path": "./mc_fabric",
+  "embedding_model": "shibing624/text2vec-base-chinese"
+}
