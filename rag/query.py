@@ -1,84 +1,97 @@
-import chromadb
-from chromadb.utils import embedding_functions
-import json
-from typing import List, Dict
+# 导入必要的库和模块
+import chromadb  # ChromaDB客户端库，用于向量数据库操作
+from chromadb.utils import embedding_functions  # 嵌入函数工具，用于文本向量化
+import json  # 用于处理JSON配置文件
+from typing import List, Dict  # 类型提示支持
 
 class ChromaQueryEngine:
+    """基于ChromaDB的查询引擎，支持元数据过滤和相似度阈值控制"""
+    
     def __init__(self, config_path: str = "./config.json"):
         """
         初始化查询引擎
         :param config_path: 配置文件路径（默认./config.json）
+            配置文件需包含:
+            - collection_name: 集合名称
+            - persist_path: 数据库持久化存储路径
+            - embedding_model: 嵌入模型名称（如'all-MiniLM-L6-v2'）
         """
+        # 加载配置文件并校验完整性
         self.config = self._load_config(config_path)
+        
+        # 创建持久化客户端实例（数据存储在本地磁盘）
         self.client = chromadb.PersistentClient(path=self.config["persist_path"])
+        
+        # 初始化句子嵌入模型（用于将文本转换为向量）
         self.sentence_transformer_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name=self.config["embedding_model"]
         )
-        self.collection = self.client.get_collection(self.config["collection_name"], embedding_function=self.sentence_transformer_ef)
+        
+        # 获取指定集合（类似数据库表），并绑定嵌入函数
+        self.collection = self.client.get_collection(
+            self.config["collection_name"],
+            embedding_function=self.sentence_transformer_ef
+        )
 
     def _load_config(self, path: str) -> Dict:
-        """加载Chroma配置"""
+        """加载并验证配置文件
+        :return: 包含配置参数的字典
+        :raises RuntimeError: 文件读取失败或配置不完整时抛出
+        """
         try:
             with open(path, 'r') as f:
                 config = json.load(f)
-            # 配置完整性校验
-            assert all(k in config for k in ["collection_name", "persist_path"])
+            # 校验必要配置项存在性
+            assert all(k in config for k in ["collection_name", "persist_path", "embedding_model"])
             return config
         except Exception as e:
             raise RuntimeError(f"配置加载失败: {str(e)}")
-
-    def query_unique_indices(self, query_text: str, k: int = 3) -> List[str]:
+    
+    def query(self, query_text: str, k: int = 3, max_distance: float = 300) -> tuple:
         """
-        执行带去重的语义查询
-        :param query_text: 查询文本
-        :param k: 返回结果数量
-        :return: 唯一索引列表
+        执行相似性查询，支持去重和相似度控制
+        :param query_text: 查询文本（需包含语义信息）
+        :param k: 最大返回结果数（默认3）
+        :param max_distance: 最大允许余弦距离（默认300，值越大相似度越低）
+        :return: tuple（匹配的source列表，对应的距离列表）
         """
-        try:
-            # 动态调整返回数量（基于配置中的索引参数）
-            expand_factor = self.config.get("query_expand_factor", 2)
-            results = self.collection.query(
-                query_texts=[query_text],
-                n_results=k * expand_factor,
-                include=["metadatas"]
-            )
-            
-            # 结果去重处理
-            unique_indices = []
-            seen = set()
-            for metadata in results["metadatas"][0]:  # 按相似度排序
-                if (current_index := metadata.get("index")) and current_index not in seen:
-                    unique_indices.append(current_index)
-                    seen.add(current_index)
-                if len(unique_indices) >= k:
-                    break
-            return unique_indices[:k]
+        # 生成查询文本的嵌入向量（转换为768/384维等向量）
+        query_embedding = self.sentence_transformer_ef([query_text])
         
-        except Exception as e:
-            print(f"查询执行异常: {str(e)}")
-            return []
-    def query_temp(self, query_text, k):
-        query_embedding = self.sentence_transformer_ef([query_text]) # 对查询文本进行 embedding
+        queried_id = ["null"]  # 已查询ID列表（初始占位避免空值）
+        distance = []  # 相似度距离记录
+        
+        # 分页式查询（每次取1个结果，循环k次）
+        for _ in range(k):
+            try:
+                results = self.collection.query(
+                    query_embeddings=query_embedding,  # 使用查询向量
+                    n_results=1,  # 每次取1个结果（实现分页）
+                    where={"source": {"$nin": queried_id}},  # 排除已查询ID（基于metadata）
+                    include=["metadatas", "distances"]  # 返回元数据和距离
+                )
+            except Exception as e:
+                # 查询异常时返回当前结果（如集合不存在或数据不足）
+                return (queried_id[1:], distance)
+            
+            # 获取当前结果的余弦距离（Chroma使用余弦距离，0-完全相似，>1不相似）
+            current_distance = results['distances'][0][0]
+            
+            # 超过阈值时提前终止查询
+            if current_distance >= max_distance:
+                return (queried_id[1:], distance)
+            
+            # 记录结果信息
+            queried_id.append(results['metadatas'][0][0]['source'])
+            distance.append(current_distance)
+        
+        # 返回最终结果（去除初始占位符）
+        return (queried_id[1:], distance)
 
-        results = self.collection.query(
-            query_embeddings=query_embedding, # 使用查询文本的 embedding 向量
-            n_results=k,
-            include=["documents", "metadatas", "distances"] # 返回文档内容, 元数据和距离
-        )
-
-        print(f"\n使用余弦相似度查询 '{query_text}' 的结果 (chunkId: chunk1):")
-        if results["documents"]:
-            for i in range(len(results["documents"][0])): # results 是嵌套列表，第一个元素是结果列表
-                print(f"  Document ID: {results['ids'][0][i]}")
-                print(f"  Text: {results['documents'][0][i]}")
-                print(f"  Metadata: {results['metadatas'][0][i]}")
-                print(f"  Distance (Cosine): {results['distances'][0][i]:.4f}") # 打印余弦距离 (越小越相似)
-        else:
-            print(f"  未找到与查询相关的文档。")
 # 使用示例
 if __name__ == "__main__":
-    # 初始化时自动加载配置
+    # 初始化查询引擎（自动加载默认路径配置）
     query_engine = ChromaQueryEngine()
     
-    # 执行查询
-    print(query_engine.query_temp("食物", k=30))
+    # 参数说明：查询文本，最多3个结果，最大距离300
+    print(query_engine.query("自定义物品", k=3))

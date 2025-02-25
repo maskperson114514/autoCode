@@ -65,7 +65,7 @@ class ChromaConfigurator:
         with open(config_path, 'w') as f:
             json.dump(self.config, f, indent=2)
 
-    def add_documents(self,keyId: str, items: List[str]) -> bool:
+    def add_documents(self, keyId: str, items: List[str]) -> bool:
         """
         添加文档并自动生成嵌入
         :param items: 待添加的文本数组
@@ -91,50 +91,51 @@ class ChromaConfigurator:
             print(f"文档添加失败: {str(e)}")
             return (False, "")
 
-# 使用示例
-configurator = ChromaConfigurator(
-    collection_name="mc_fabric_coll",
-    persist_path="./mc_fabric"
-)
+if __name__ == "__main__":
+  # 使用示例
+  configurator = ChromaConfigurator(
+      collection_name="mc_fabric_coll",
+      persist_path="./mc_fabric"
+  )
 
-items = {
-  "核心主题": "创建 Minecraft 物品",
-  "核心概念定义": "注册表：Minecraft 中存储所有物品的地方。",
-  "目的": "指导用户注册、添加纹理、模型和命名 Minecraft 物品。",
-  "组成部分": [
-    "物品类准备",
-    "物品注册",
-    "添加到物品组",
-    "物品命名",
-    "添加纹理和模型",
-    "添加物品模型描述",
-    "使物品可堆肥或作为燃料",
-    "添加基本的合成配方",
-    "自定义物品提示"
-  ],
-  "特征": [
-    "物品需要注册才能在游戏中使用",
-    "物品可以通过 Items.Settings 类配置属性",
-    "物品需要纹理和模型才能在游戏中显示",
-    "物品可以通过语言文件进行命名",
-    "物品可以添加到物品组以便在创造模式中找到",
-    "可以通过 Fabric API 添加额外属性，例如可堆肥性或燃料值",
-    "可以添加合成配方来定义如何合成物品",
-    "可以自定义物品的提示信息"
-  ],
-  "要素之间的关系": [
-    "注册物品需要先准备物品类",
-    "添加纹理和模型依赖于物品的注册",
-    "物品命名需要创建语言文件",
-    "将物品添加到物品组需要在初始化方法中完成",
-    "物品模型描述JSON引用了物品的模型",
-    "添加合成配方需要创建JSON文件"
-  ],
-  "应用场景": [
-    "模组开发",
-    "自定义 Minecraft 游戏内容"
-  ]
-}
-items = extract_values_to_array(items)
-success = configurator.add_documents("food2222",items)
-print(f"操作状态: {success} ")
+  items = {
+    "核心主题": "创建 Minecraft 物品",
+    "核心概念定义": "注册表：Minecraft 中存储所有物品的地方。",
+    "目的": "指导用户注册、添加纹理、模型和命名 Minecraft 物品。",
+    "组成部分": [
+      "物品类准备",
+      "物品注册",
+      "添加到物品组",
+      "物品命名",
+      "添加纹理和模型",
+      "添加物品模型描述",
+      "使物品可堆肥或作为燃料",
+      "添加基本的合成配方",
+      "自定义物品提示"
+    ],
+    "特征": [
+      "物品需要注册才能在游戏中使用",
+      "物品可以通过 Items.Settings 类配置属性",
+      "物品需要纹理和模型才能在游戏中显示",
+      "物品可以通过语言文件进行命名",
+      "物品可以添加到物品组以便在创造模式中找到",
+      "可以通过 Fabric API 添加额外属性，例如可堆肥性或燃料值",
+      "可以添加合成配方来定义如何合成物品",
+      "可以自定义物品的提示信息"
+    ],
+    "要素之间的关系": [
+      "注册物品需要先准备物品类",
+      "添加纹理和模型依赖于物品的注册",
+      "物品命名需要创建语言文件",
+      "将物品添加到物品组需要在初始化方法中完成",
+      "物品模型描述JSON引用了物品的模型",
+      "添加合成配方需要创建JSON文件"
+    ],
+    "应用场景": [
+      "模组开发",
+      "自定义 Minecraft 游戏内容"
+    ]
+  }
+  items = extract_values_to_array(items)
+  success = configurator.add_documents("foo1413",items)
+  print(f"操作状态: {success} ")
